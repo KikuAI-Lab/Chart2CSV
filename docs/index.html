@@ -728,6 +728,23 @@
       color: var(--text-secondary);
     }
 
+    a.example-card {
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .download-hint {
+      font-size: 0.8rem;
+      color: var(--accent);
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .example-card:hover .download-hint {
+      opacity: 1;
+    }
+
     .warning-box {
       display: flex;
       align-items: flex-start;
@@ -947,20 +964,24 @@
 
       <!-- Supported Charts Examples -->
       <div class="examples-section">
-        <h3 style="text-align: center; margin-bottom: 24px; color: var(--text-secondary);">✅ Supported Chart Types</h3>
+        <h3 style="text-align: center; margin-bottom: 24px; color: var(--text-secondary);">✅ Supported Chart Types —
+          Click to Download & Test</h3>
         <div class="examples-grid">
-          <div class="example-card">
+          <a href="example_line.png" download="line_chart_example.png" class="example-card">
             <img src="example_line.png" alt="Line chart example">
             <span>Line Chart</span>
-          </div>
-          <div class="example-card">
+            <div class="download-hint">📥 Click to download</div>
+          </a>
+          <a href="example_bar.png" download="bar_chart_example.png" class="example-card">
             <img src="example_bar.png" alt="Bar chart example">
             <span>Bar Chart</span>
-          </div>
-          <div class="example-card">
+            <div class="download-hint">📥 Click to download</div>
+          </a>
+          <a href="example_scatter.png" download="scatter_plot_example.png" class="example-card">
             <img src="example_scatter.png" alt="Scatter plot example">
             <span>Scatter Plot</span>
-          </div>
+            <div class="download-hint">📥 Click to download</div>
+          </a>
         </div>
 
         <div class="warning-box">
