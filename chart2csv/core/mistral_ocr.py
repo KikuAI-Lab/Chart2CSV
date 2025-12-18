@@ -153,13 +153,14 @@ class MistralOCRBackend:
                                 "type": "text",
                                 "text": """Extract all numbers from these two chart axis images.
                                 
-Image 1 is the X-axis (horizontal, read left to right).
-Image 2 is the Y-axis (vertical, read top to bottom).
+Image 1 is the X-axis (horizontal). Read numbers from LEFT to RIGHT.
+Image 2 is the Y-axis (vertical). Read numbers from BOTTOM to TOP (as chart axes normally work).
 
-Return JSON format only:
-{"x": [list of numbers], "y": [list of numbers]}
+Return JSON format only, with numbers in the order you read them:
+{"x": [left to right numbers], "y": [bottom to top numbers]}
 
-Example: {"x": [0, 10, 20, 30], "y": [100, 75, 50, 25, 0]}"""
+Example for a chart with X: 0,10,20,30 and Y: 0,25,50,75,100:
+{"x": [0, 10, 20, 30], "y": [0, 25, 50, 75, 100]}"""
                             },
                             {"type": "image_url", "image_url": x_base64},
                             {"type": "image_url", "image_url": y_base64}

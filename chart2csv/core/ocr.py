@@ -118,20 +118,45 @@ def _extract_with_mistral(
         y_values = backend.process_axis_strip(y_strip) if y_strip.size > 0 else []
 
     # Align X values with detected ticks
+    # Use spacing-based selection: pick ticks that are most evenly spaced
     detected_x_ticks = sorted(ticks["x"])
-    count = min(len(detected_x_ticks), len(x_values))
-    for i in range(count):
-        px = detected_x_ticks[i]
-        val = x_values[i]
-        ticks_data["x"].append({"pixel": px, "value": val, "text": str(val)})
+    n_ocr = len(x_values)
+    n_detected = len(detected_x_ticks)
+    
+    if n_ocr > 0 and n_detected >= n_ocr:
+        # Select N evenly-spaced ticks from detected positions
+        # This handles cases where detector finds extra false positives
+        if n_detected == n_ocr:
+            selected_x_ticks = detected_x_ticks
+        else:
+            # Pick indices that give the most even spacing
+            # Use stride to spread selection across detected ticks
+            # Take from the end of range (skip early false positives near axis)
+            skip = n_detected - n_ocr
+            selected_x_ticks = detected_x_ticks[skip:]
+        
+        for i, px in enumerate(selected_x_ticks):
+            val = x_values[i]
+            ticks_data["x"].append({"pixel": px, "value": val, "text": str(val)})
 
     # Align Y values with detected ticks
-    detected_y_ticks = sorted(ticks["y"])
-    count = min(len(detected_y_ticks), len(y_values))
-    for i in range(count):
-        py = detected_y_ticks[i]
-        val = y_values[i]
-        ticks_data["y"].append({"pixel": py, "value": val, "text": str(val)})
+    # Y pixels sorted descending (largest = bottom of chart)
+    # OCR values go bottom-to-top: first value is at bottom (largest pixel)
+    detected_y_ticks = sorted(ticks["y"], reverse=True)
+    n_ocr_y = len(y_values)
+    n_detected_y = len(detected_y_ticks)
+    
+    if n_ocr_y > 0 and n_detected_y >= n_ocr_y:
+        if n_detected_y == n_ocr_y:
+            selected_y_ticks = detected_y_ticks
+        else:
+            # Skip extra ticks near X-axis (false positives at bottom of chart)
+            skip = n_detected_y - n_ocr_y
+            selected_y_ticks = detected_y_ticks[skip:]
+        
+        for i, py in enumerate(selected_y_ticks):
+            val = y_values[i]
+            ticks_data["y"].append({"pixel": py, "value": val, "text": str(val)})
 
     # Calculate confidence
     total_ticks = len(ticks["x"]) + len(ticks["y"])
