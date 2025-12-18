@@ -1,177 +1,542 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chart2CSV Demo - Extract Data from Charts</title>
+  <title>Chart2CSV — AI-Powered Chart Data Extraction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --border: #2a2a2a;
-      --text: #e0e0e0;
-      --text-muted: #888;
-      --accent: #00d4aa;
-      --accent-dim: #00a080;
-      --error: #ff4757;
+      --bg: #050505;
+      --surface: #0a0a0a;
+      --surface-2: #111111;
+      --border: #1a1a1a;
+      --text: #f0f0f0;
+      --text-muted: #666;
+      --accent: #00ff88;
+      --accent-dim: #00cc6a;
+      --accent-glow: rgba(0, 255, 136, 0.15);
+      --gradient-1: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+      --gradient-2: linear-gradient(135deg, #ff00aa 0%, #ff6600 100%);
     }
-    
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    .bg-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .bg-gradient::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(0, 255, 136, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(0, 212, 255, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(255, 0, 170, 0.03) 0%, transparent 50%);
+      animation: gradientMove 20s ease-in-out infinite;
+    }
+
+    @keyframes gradientMove {
+
+      0%,
+      100% {
+        transform: translate(0, 0) rotate(0deg);
+      }
+
+      25% {
+        transform: translate(-5%, -5%) rotate(5deg);
+      }
+
+      50% {
+        transform: translate(5%, 5%) rotate(-5deg);
+      }
+
+      75% {
+        transform: translate(-3%, 3%) rotate(3deg);
+      }
+    }
+
+    /* Grid overlay */
+    .grid-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1000px;
+      margin: 0 auto;
       padding: 2rem;
     }
-    
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 4rem 0 3rem;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 0.85rem;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+      animation: fadeInUp 0.6s ease-out;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+      }
+    }
+
     h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, var(--accent), #00ff88);
+      font-size: clamp(2.5rem, 8vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+      animation: fadeInUp 0.6s ease-out 0.1s both;
+    }
+
+    h1 .gradient-text {
+      background: var(--gradient-1);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    
-    .subtitle {
+
+    .hero-subtitle {
+      font-size: 1.25rem;
       color: var(--text-muted);
-      margin-bottom: 2rem;
-      font-size: 1.1rem;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+      line-height: 1.6;
+      animation: fadeInUp 0.6s ease-out 0.2s both;
     }
-    
-    .container {
-      width: 100%;
-      max-width: 800px;
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
-    
-    .api-key-section {
+
+    /* Killer feature callout */
+    .killer-feature {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+      animation: fadeInUp 0.6s ease-out 0.3s both;
+    }
+
+    .killer-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
+      font-size: 0.95rem;
+      transition: all 0.3s ease;
+    }
+
+    .killer-item:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 30px var(--accent-glow);
+      transform: translateY(-2px);
+    }
+
+    .killer-item .icon {
+      font-size: 1.5rem;
+    }
+
+    .killer-item .text strong {
+      color: var(--accent);
+    }
+
+    /* Comparison section */
+    .comparison {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      margin-bottom: 3rem;
+      animation: fadeInUp 0.6s ease-out 0.4s both;
+    }
+
+    .comparison h2 {
+      text-align: center;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .comparison-item {
+      padding: 1.25rem;
+      background: var(--surface-2);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .comparison-item.highlight {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.05) 0%, transparent 100%);
+    }
+
+    .comparison-item h3 {
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .comparison-item.highlight h3 {
+      color: var(--accent);
+    }
+
+    .comparison-item ul {
+      list-style: none;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .comparison-item ul li {
+      padding: 0.3rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .comparison-item ul li::before {
+      content: '✓';
+      color: var(--accent);
+    }
+
+    .comparison-item:not(.highlight) ul li::before {
+      content: '•';
+      color: var(--text-muted);
+    }
+
+    /* Main app section */
+    .app-section {
+      animation: fadeInUp 0.6s ease-out 0.5s both;
+    }
+
+    .api-key-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
       padding: 1.5rem;
       margin-bottom: 1.5rem;
     }
-    
+
     .api-key-section label {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
     }
-    
+
     .api-key-section input {
       width: 100%;
-      padding: 0.75rem 1rem;
+      padding: 0.875rem 1rem;
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       color: var(--text);
       font-size: 1rem;
-      font-family: monospace;
+      font-family: 'SF Mono', Monaco, monospace;
+      transition: all 0.2s ease;
     }
-    
+
     .api-key-section input:focus {
       outline: none;
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
     }
-    
+
     .api-key-section small {
       display: block;
       margin-top: 0.5rem;
       color: var(--text-muted);
+      font-size: 0.85rem;
     }
-    
+
     .api-key-section small a {
       color: var(--accent);
       text-decoration: none;
     }
-    
+
+    /* Dropzone */
     .dropzone {
+      position: relative;
       background: var(--surface);
       border: 2px dashed var(--border);
-      border-radius: 16px;
-      padding: 3rem;
+      border-radius: 20px;
+      padding: 4rem 2rem;
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all 0.3s ease;
       margin-bottom: 1.5rem;
+      overflow: hidden;
     }
-    
-    .dropzone:hover, .dropzone.dragover {
+
+    .dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--gradient-1);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .dropzone:hover::before,
+    .dropzone.dragover::before {
+      opacity: 0.05;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
       border-color: var(--accent);
-      background: rgba(0, 212, 170, 0.05);
+      transform: scale(1.01);
     }
-    
+
+    .dropzone-content {
+      position: relative;
+      z-index: 1;
+    }
+
     .dropzone-icon {
-      font-size: 3rem;
+      font-size: 4rem;
       margin-bottom: 1rem;
+      animation: float 3s ease-in-out infinite;
     }
-    
-    .dropzone p {
-      color: var(--text-muted);
+
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+
+    .dropzone h3 {
+      font-size: 1.25rem;
       margin-bottom: 0.5rem;
     }
-    
-    .dropzone .formats {
-      font-size: 0.85rem;
+
+    .dropzone p {
       color: var(--text-muted);
     }
-    
+
+    /* Preview */
     .preview-section {
       display: none;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 16px;
       padding: 1.5rem;
       margin-bottom: 1.5rem;
     }
-    
-    .preview-section.active { display: block; }
-    
+
+    .preview-section.active {
+      display: block;
+      animation: fadeInUp 0.4s ease-out;
+    }
+
     .preview-section h3 {
       margin-bottom: 1rem;
       font-weight: 600;
     }
-    
+
     .preview-image {
       max-width: 100%;
       max-height: 400px;
-      border-radius: 8px;
+      border-radius: 12px;
       border: 1px solid var(--border);
     }
-    
+
+    /* Extract button */
     .extract-btn {
+      position: relative;
       width: 100%;
-      padding: 1rem;
-      background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+      padding: 1.25rem;
+      background: var(--gradient-1);
       border: none;
-      border-radius: 10px;
+      border-radius: 14px;
       color: #000;
       font-size: 1.1rem;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: transform 0.1s ease, opacity 0.2s ease;
+      transition: all 0.3s ease;
       margin-bottom: 1.5rem;
+      overflow: hidden;
     }
-    
-    .extract-btn:hover { transform: translateY(-2px); }
-    .extract-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-    
+
+    .extract-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .extract-btn:hover::before {
+      left: 100%;
+    }
+
+    .extract-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 40px rgba(0, 255, 136, 0.3);
+    }
+
+    .extract-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Status */
+    .status {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--text-muted);
+      display: none;
+    }
+
+    .status.active {
+      display: block;
+      animation: fadeInUp 0.3s ease-out;
+    }
+
+    .status.error {
+      color: #ff4757;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 0.75rem;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* Result */
     .result-section {
       display: none;
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      border: 1px solid var(--accent);
+      border-radius: 16px;
       padding: 1.5rem;
+      box-shadow: 0 0 40px var(--accent-glow);
     }
-    
-    .result-section.active { display: block; }
-    
+
+    .result-section.active {
+      display: block;
+      animation: resultPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes resultPop {
+      0% {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
     .result-section h3 {
       margin-bottom: 1rem;
       font-weight: 600;
@@ -179,108 +544,191 @@
       justify-content: space-between;
       align-items: center;
     }
-    
+
+    .result-meta {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .result-meta span {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
     .download-btn {
-      padding: 0.5rem 1rem;
+      padding: 0.6rem 1.25rem;
       background: var(--accent);
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       color: #000;
       font-weight: 600;
       cursor: pointer;
       font-size: 0.9rem;
+      transition: all 0.2s ease;
     }
-    
+
+    .download-btn:hover {
+      transform: scale(1.05);
+    }
+
     .csv-preview {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 1rem;
-      font-family: monospace;
-      font-size: 0.9rem;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.85rem;
       max-height: 300px;
       overflow: auto;
       white-space: pre;
+      line-height: 1.5;
     }
-    
-    .status {
-      text-align: center;
-      padding: 1rem;
-      color: var(--text-muted);
-      display: none;
-    }
-    
-    .status.active { display: block; }
-    
-    .status.error { color: var(--error); }
-    
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-right: 0.5rem;
-      vertical-align: middle;
-    }
-    
-    @keyframes spin { to { transform: rotate(360deg); } }
-    
+
+    /* Footer */
     footer {
-      margin-top: 3rem;
+      margin-top: 4rem;
+      padding: 2rem;
+      text-align: center;
       color: var(--text-muted);
       font-size: 0.9rem;
-      text-align: center;
+      border-top: 1px solid var(--border);
     }
-    
+
     footer a {
       color: var(--accent);
       text-decoration: none;
     }
+
+    footer .links {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 1rem;
+    }
   </style>
 </head>
+
 <body>
-  <h1>Chart2CSV</h1>
-  <p class="subtitle">Extract data from chart images using AI</p>
-  
+  <div class="bg-gradient"></div>
+  <div class="grid-overlay"></div>
+
   <div class="container">
-    <div class="api-key-section">
-      <label for="apiKey">Mistral API Key</label>
-      <input type="password" id="apiKey" placeholder="Enter your Mistral API key...">
-      <small>Get your key at <a href="https://console.mistral.ai/" target="_blank">console.mistral.ai</a>. Your key stays in your browser.</small>
-    </div>
-    
-    <div class="dropzone" id="dropzone">
-      <div class="dropzone-icon">📊</div>
-      <p><strong>Drop chart image here</strong></p>
-      <p>or click to select</p>
-      <p class="formats">PNG, JPG, WebP supported</p>
-      <input type="file" id="fileInput" accept="image/*" hidden>
-    </div>
-    
-    <div class="preview-section" id="previewSection">
-      <h3>Preview</h3>
-      <img class="preview-image" id="previewImage" alt="Chart preview">
-    </div>
-    
-    <button class="extract-btn" id="extractBtn" disabled>Extract Data</button>
-    
-    <div class="status" id="status"></div>
-    
-    <div class="result-section" id="resultSection">
-      <h3>
-        Extracted Data
-        <button class="download-btn" id="downloadBtn">Download CSV</button>
-      </h3>
-      <div class="csv-preview" id="csvPreview"></div>
-    </div>
+    <section class="hero">
+      <div class="hero-badge">
+        <span>AI-Powered</span>
+      </div>
+      <h1>
+        <span class="gradient-text">Zero-Click</span><br>
+        Chart Extraction
+      </h1>
+      <p class="hero-subtitle">
+        Unlike traditional digitizers that require manual point clicking, Chart2CSV uses AI vision to instantly extract
+        all data points. Drop your chart, get CSV.
+      </p>
+
+      <div class="killer-feature">
+        <div class="killer-item">
+          <span class="icon">⚡</span>
+          <span class="text"><strong>No clicking</strong> required</span>
+        </div>
+        <div class="killer-item">
+          <span class="icon">🧠</span>
+          <span class="text"><strong>AI understands</strong> axis labels</span>
+        </div>
+        <div class="killer-item">
+          <span class="icon">🔒</span>
+          <span class="text"><strong>Privacy-first</strong> — runs locally</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="comparison">
+      <h2>Why Chart2CSV?</h2>
+      <div class="comparison-grid">
+        <div class="comparison-item">
+          <h3>📊 WebPlotDigitizer</h3>
+          <ul>
+            <li>Manual point clicking</li>
+            <li>Slow for many points</li>
+            <li>Can include gridlines</li>
+            <li>Desktop/Web app</li>
+          </ul>
+        </div>
+        <div class="comparison-item">
+          <h3>📈 PlotDigitizer Pro</h3>
+          <ul>
+            <li>Paid subscription</li>
+            <li>Semi-automatic</li>
+            <li>One curve at a time</li>
+            <li>No API access</li>
+          </ul>
+        </div>
+        <div class="comparison-item highlight">
+          <h3>⚡ Chart2CSV</h3>
+          <ul>
+            <li>Zero-click AI extraction</li>
+            <li>Instant results</li>
+            <li>Open source & free</li>
+            <li>CLI + API + Web</li>
+            <li>Mistral Vision powered</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="app-section">
+      <div class="api-key-section">
+        <label for="apiKey">🔑 Mistral API Key</label>
+        <input type="password" id="apiKey" placeholder="Enter your Mistral API key...">
+        <small>Get your free key at <a href="https://console.mistral.ai/" target="_blank">console.mistral.ai</a>. Your
+          key never leaves your browser.</small>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-content">
+          <div class="dropzone-icon">📊</div>
+          <h3>Drop your chart image here</h3>
+          <p>or click to select • PNG, JPG, WebP</p>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </div>
+
+      <div class="preview-section" id="previewSection">
+        <h3>📷 Preview</h3>
+        <img class="preview-image" id="previewImage" alt="Chart preview">
+      </div>
+
+      <button class="extract-btn" id="extractBtn" disabled>
+        ⚡ Extract Data with AI
+      </button>
+
+      <div class="status" id="status"></div>
+
+      <div class="result-section" id="resultSection">
+        <h3>
+          ✅ Extracted Data
+          <button class="download-btn" id="downloadBtn">Download CSV</button>
+        </h3>
+        <div class="result-meta">
+          <span id="pointCount">📍 -- points</span>
+          <span id="extractTime">⏱️ -- ms</span>
+        </div>
+        <div class="csv-preview" id="csvPreview"></div>
+      </div>
+    </section>
   </div>
-  
+
   <footer>
-    <p>Powered by <a href="https://github.com/kiku-jw/Chart2CSV" target="_blank">Chart2CSV</a> & Mistral AI</p>
-    <p>Your images are processed directly via Mistral API — nothing is stored.</p>
+    <p>Built with ❤️ by <a href="https://github.com/kiku-jw" target="_blank">kiku-jw</a></p>
+    <div class="links">
+      <a href="https://github.com/kiku-jw/Chart2CSV" target="_blank">GitHub</a>
+      <a href="https://github.com/kiku-jw/Chart2CSV#readme" target="_blank">Documentation</a>
+      <a href="https://github.com/kiku-jw/Chart2CSV/issues" target="_blank">Report Issue</a>
+    </div>
   </footer>
 
   <script>
@@ -294,19 +742,21 @@
     const resultSection = document.getElementById('resultSection');
     const csvPreview = document.getElementById('csvPreview');
     const downloadBtn = document.getElementById('downloadBtn');
-    
+    const pointCount = document.getElementById('pointCount');
+    const extractTime = document.getElementById('extractTime');
+
     let currentFile = null;
     let currentCSV = '';
-    
+
     // Load saved API key
     const savedKey = localStorage.getItem('mistral_api_key');
     if (savedKey) apiKeyInput.value = savedKey;
-    
-    apiKeyInput.addEventListener('change', () => {
+
+    apiKeyInput.addEventListener('input', () => {
       localStorage.setItem('mistral_api_key', apiKeyInput.value);
       updateExtractButton();
     });
-    
+
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -321,7 +771,7 @@
     fileInput.addEventListener('change', () => {
       if (fileInput.files.length) handleFile(fileInput.files[0]);
     });
-    
+
     function handleFile(file) {
       if (!file.type.startsWith('image/')) {
         showStatus('Please select an image file', true);
@@ -338,38 +788,44 @@
       resultSection.classList.remove('active');
       status.classList.remove('active');
     }
-    
+
     function updateExtractButton() {
       extractBtn.disabled = !(currentFile && apiKeyInput.value.trim());
     }
-    
+
     function showStatus(msg, isError = false) {
       status.innerHTML = msg;
       status.className = 'status active' + (isError ? ' error' : '');
     }
-    
+
     extractBtn.addEventListener('click', async () => {
       if (!currentFile || !apiKeyInput.value.trim()) return;
-      
+
+      const startTime = Date.now();
       extractBtn.disabled = true;
-      showStatus('<span class="spinner"></span> Analyzing chart with Mistral Vision...');
+      showStatus('<span class="spinner"></span> AI is analyzing your chart...');
       resultSection.classList.remove('active');
-      
+
       try {
         const base64 = await fileToBase64(currentFile);
         const csv = await extractWithMistral(apiKeyInput.value.trim(), base64);
-        
+
+        const elapsed = Date.now() - startTime;
+        const lines = csv.trim().split('\n').length - 1;
+
         currentCSV = csv;
         csvPreview.textContent = csv;
+        pointCount.textContent = `📍 ${lines} points`;
+        extractTime.textContent = `⏱️ ${elapsed}ms`;
         resultSection.classList.add('active');
         status.classList.remove('active');
       } catch (err) {
-        showStatus('Error: ' + err.message, true);
+        showStatus('❌ ' + err.message, true);
       } finally {
         extractBtn.disabled = false;
       }
     });
-    
+
     downloadBtn.addEventListener('click', () => {
       const blob = new Blob([currentCSV], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
@@ -379,7 +835,7 @@
       a.click();
       URL.revokeObjectURL(url);
     });
-    
+
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -388,7 +844,7 @@
         reader.readAsDataURL(file);
       });
     }
-    
+
     async function extractWithMistral(apiKey, base64Image) {
       const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',
@@ -431,20 +887,19 @@ x,y
           max_tokens: 4096
         })
       });
-      
+
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || 'API request failed');
       }
-      
+
       const data = await response.json();
       let csv = data.choices[0].message.content.trim();
-      
-      // Clean up markdown code blocks if present
       csv = csv.replace(/```csv\n?/g, '').replace(/```\n?/g, '').trim();
-      
+
       return csv;
     }
   </script>
 </body>
+
 </html>

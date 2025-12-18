@@ -1,73 +1,85 @@
-# Chart2CSV - Plot Digitizer
+# Chart2CSV — Zero-Click AI Chart Extraction
 
-Extract data from chart images (PNG/JPG/PDF) to CSV/JSON with Computer Vision and OCR.
+> **The killer feature:** Unlike traditional digitizers that require manual point clicking, Chart2CSV uses AI vision to instantly extract all data points. Drop your chart, get CSV.
 
-## Problem
+[![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://kiku-jw.github.io/Chart2CSV/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://python.org)
 
-Scientific papers, reports, and presentations often contain charts without source data. Researchers, analysts, and data scientists need to extract numbers from chart images quickly and reproducibly.
+## 🎯 Why Chart2CSV?
 
-## Solution
+| Feature | WebPlotDigitizer | PlotDigitizer Pro | **Chart2CSV** |
+|---------|------------------|-------------------|---------------|
+| Extraction | Manual clicking | Semi-auto | **⚡ Zero-click AI** |
+| Speed | Slow (click each point) | Moderate | **Instant** |
+| Price | Free | $$$  Subscription | **Free & Open Source** |
+| Multiple curves | No | One at a time | **Detects automatically** |
+| API Access | ❌ | ❌ | **✅ CLI + Python** |
+| AI OCR | ❌ | ❌ | **✅ Mistral Vision** |
+| Privacy | Cloud upload | Cloud upload | **🔒 Runs locally** |
 
-**Chart2CSV** is an offline-first CLI tool that:
-- Takes PNG/JPG chart images (or PDF pages)
-- Returns CSV data + JSON metadata + confidence scores + visual overlay
-- Provides honest confidence reporting and manual calibration fallback
-- Works completely offline (privacy by default)
-
-## Quick Start
+## ⚡ Quick Start
 
 ```bash
 # Install
 pip install chart2csv
 
-# Basic usage
-python -m chart2csv.cli.main plot.png --output data.csv
+# Basic — just drop and extract
+python -m chart2csv.cli.main plot.png
 
-# With overlay for verification
-python -m chart2csv.cli.main plot.png --overlay check.png
+# With AI (Mistral Vision) — better OCR
+export MISTRAL_API_KEY=your_key
+python -m chart2csv.cli.main plot.png --use-mistral
 
-# Batch processing
+# Batch — process entire folder
 python -m chart2csv.cli.main figures/ --batch --output-dir results/
 
-# Manual calibration (when auto fails)
-python -m chart2csv.cli.main plot.png --calibrate
+# Verify with overlay
+python -m chart2csv.cli.main plot.png --overlay check.png
 ```
 
-## Supported Chart Types (MVP)
+## 🌐 Try It Now
+
+**[Live Demo →](https://kiku-jw.github.io/Chart2CSV/)**
+
+No installation required. Uses Mistral Vision API directly in your browser.
+
+## 🚀 Key Features
+
+### Zero-Click AI Extraction
+- **No manual point clicking** — AI understands your chart
+- **Automatic axis detection** — finds X/Y axes and scale
+- **Smart OCR** — reads tick labels accurately
+- **Multiple backends** — Tesseract (offline) or Mistral (cloud)
+
+### Developer-First
+```bash
+# CLI with all options
+python -m chart2csv.cli.main chart.png \
+  --use-mistral \           # Use Mistral Vision AI
+  --chart-type scatter \    # Force chart type
+  --x-scale log \           # Log scale axes
+  --crop 50,30,750,620 \    # Manual crop
+  --overlay proof.png       # Visual verification
+```
+
+### Honest Confidence Scoring
+| Zone | Score | Meaning |
+|------|-------|---------|
+| 🟢 High | ≥0.7 | Use data confidently |
+| 🟡 Medium | 0.4-0.7 | Check overlay |
+| 🔴 Low | <0.4 | Use `--calibrate` |
+
+## 📊 Supported Charts
 
 - ✅ Scatter plots
-- ✅ Line plots (single line)
-- ✅ Bar charts (simple columns)
-- ✅ Linear scales only
-- ⏳ Log scale (via manual calibration)
-- ❌ Multi-series (roadmap)
-- ❌ Dual-axis (roadmap)
-- ❌ Stacked bars (roadmap)
+- ✅ Line charts
+- ✅ Bar charts
+- ✅ Linear & Log scales
+- ⏳ Multi-series (roadmap)
+- ⏳ Dual-axis (roadmap)
 
-## Key Features
-
-### MVP (v0.1.0)
-1. **PNG/JPG input** - Standard image formats
-2. **Auto-detection** - Plot area, axes, tick labels (best-effort)
-3. **Manual overrides** - `--crop`, `--x-axis`, `--y-axis` when auto fails
-4. **OCR tick labels** - Tesseract-based number recognition
-5. **CSV/JSON export** - Clean data + metadata
-6. **Overlay generation** - Visual proof of extraction
-7. **Confidence scoring** - 0.0-1.0 with clear zones (high/medium/low)
-8. **Warning system** - Honest diagnostics (OCR_FAILED, POSSIBLE_LOG_SCALE, etc.)
-9. **Calibration fallback** - Numeric input mode when auto fails
-10. **Benchmark mode** - Measure quality on your own fixtures
-
-### Not in MVP
-- Multi-series + legend parsing
-- Dual-axis charts
-- Auto log-scale detection
-- Click-based calibration UI
-- PDF multi-page auto
-- Web UI / API / Telegram bot
-- Automatic rotation correction
-
-## Philosophy
+## 🛠️ Philosophy
 
 **Better to say "not sure" than give wrong data silently.**
 
