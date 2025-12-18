@@ -29,6 +29,10 @@ def main():
     parser.add_argument("--y-axis", type=int, help="Manual Y-axis X-position")
     parser.add_argument("--calibrate", action="store_true", help="Manual calibration")
     
+    # OCR backend options
+    parser.add_argument("--use-mistral", action="store_true", help="Use Mistral OCR instead of Tesseract")
+    parser.add_argument("--no-cache", action="store_true", help="Disable OCR result caching")
+    
     # Batch options
     parser.add_argument("--batch", action="store_true", help="Process directory")
     parser.add_argument("--output-dir", help="Output directory for batch mode")
@@ -69,7 +73,9 @@ def process_single(args):
             y_scale=Scale(args.y_scale),
             chart_type=ChartType(args.chart_type) if args.chart_type else None,
             calibration_points=calibration,
-            generate_overlay_image=True if args.overlay else False
+            generate_overlay_image=True if args.overlay else False,
+            use_mistral=args.use_mistral,
+            use_cache=not args.no_cache
         )
     except Exception as e:
         print(f"Error during extraction: {e}")
@@ -114,7 +120,12 @@ def process_batch(args):
     for f in files:
         print(f"  [{f.name}]", end=" ", flush=True)
         try:
-            result = extract_chart(f, generate_overlay_image=True)
+            result = extract_chart(
+                f, 
+                generate_overlay_image=True,
+                use_mistral=args.use_mistral,
+                use_cache=not args.no_cache
+            )
             export_csv(result, output_dir / f.with_suffix(".csv").name)
             save_overlay(result.overlay, (output_dir / f"{f.stem}_overlay.png"))
             print(f"✓ (conf: {result.confidence.overall():.2f})")

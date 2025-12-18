@@ -7,7 +7,7 @@ This module handles interaction with Mistral's OCR API.
 import os
 import base64
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import cv2
 
@@ -117,3 +117,73 @@ class MistralOCRBackend:
         if not self.is_available():
             return []
         return extract_numbers_from_mistral(image)
+    
+    def process_both_axes(
+        self, 
+        x_strip: np.ndarray, 
+        y_strip: np.ndarray
+    ) -> Tuple[List[float], List[float]]:
+        """
+        Process both X and Y axis strips in a single API call for efficiency.
+        
+        Uses chat completions with multiple images to reduce API calls.
+        
+        Args:
+            x_strip: Image strip for X-axis labels
+            y_strip: Image strip for Y-axis labels
+            
+        Returns:
+            Tuple of (x_values, y_values)
+        """
+        if not self.is_available():
+            return [], []
+        
+        try:
+            x_base64 = encode_image_base64(x_strip)
+            y_base64 = encode_image_base64(y_strip)
+            
+            # Use chat completions with multiple images for batch processing
+            response = self.client.chat.complete(
+                model="pixtral-12b-2409",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": """Extract all numbers from these two chart axis images.
+                                
+Image 1 is the X-axis (horizontal, read left to right).
+Image 2 is the Y-axis (vertical, read top to bottom).
+
+Return JSON format only:
+{"x": [list of numbers], "y": [list of numbers]}
+
+Example: {"x": [0, 10, 20, 30], "y": [100, 75, 50, 25, 0]}"""
+                            },
+                            {"type": "image_url", "image_url": x_base64},
+                            {"type": "image_url", "image_url": y_base64}
+                        ]
+                    }
+                ],
+                max_tokens=1024
+            )
+            
+            content = response.choices[0].message.content.strip()
+            # Parse JSON response
+            import json
+            # Clean markdown if present
+            content = content.replace("```json", "").replace("```", "").strip()
+            data = json.loads(content)
+            
+            x_values = [float(v) for v in data.get("x", [])]
+            y_values = [float(v) for v in data.get("y", [])]
+            
+            return x_values, y_values
+            
+        except Exception as e:
+            print(f"Batch Mistral OCR failed: {e}")
+            # Fallback to individual calls
+            x_values = extract_numbers_from_mistral(x_strip)
+            y_values = extract_numbers_from_mistral(y_strip)
+            return x_values, y_values
