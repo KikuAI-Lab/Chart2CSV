@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  chart2csv-api:
+    build: .
+    container_name: chart2csv-api
+    restart: unless-stopped
+    ports:
+      - "8010:8000"
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
