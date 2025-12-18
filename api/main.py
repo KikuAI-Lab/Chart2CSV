@@ -255,7 +255,7 @@ async def extract_data(
             
             # Build CSV
             csv_lines = ["x,y"]
-            for point in result.data_points:
+            for point in result.data:
                 csv_lines.append(f"{point[0]},{point[1]}")
             csv_content = "\n".join(csv_lines)
             
@@ -343,7 +343,7 @@ async def extract_data_base64(
             )
             
             csv_lines = ["x,y"]
-            for point in result.data_points:
+            for point in result.data:
                 csv_lines.append(f"{point[0]},{point[1]}")
             csv_content = "\n".join(csv_lines)
             
