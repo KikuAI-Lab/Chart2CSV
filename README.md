@@ -2,9 +2,9 @@
   
 # Chart2CSV
 
-### Zero-Click AI Chart Data Extraction
+### AI-Powered Chart Data Extraction
 
-**Extract data from chart images to CSV. No clicking required.**
+**Extract data from chart images to CSV using Mistral Pixtral Vision. No clicking required.**
 
 [Live Demo](https://kiku-jw.github.io/Chart2CSV/) · [Documentation](https://github.com/kiku-jw/Chart2CSV/wiki) · [Report Bug](https://github.com/kiku-jw/Chart2CSV/issues)
 
@@ -53,11 +53,13 @@ No installation needed. Works in your browser.
 | | Feature | Description |
 |---|---|---|
 | ⚡ | **Zero-Click** | AI understands your chart automatically |
-| 🧠 | **Smart OCR** | Mistral Vision reads axis labels accurately |
-| 🔒 | **Privacy** | Runs offline by default with Tesseract |
+| 🧠 | **Mistral Pixtral** | Powered by Mistral's vision LLM for 90%+ accuracy |
+| 🔒 | **Privacy** | Offline mode available with Tesseract |
 | 📊 | **Multi-Chart** | Line, scatter, bar charts supported |
-| ⚙️ | **CLI** | Batch process folders of charts |
+| ⚙️ | **CLI & API** | Batch process folders, REST API included |
 | ✓ | **Overlay** | Visual verification of detected points |
+
+> **Powered by [Mistral AI](https://mistral.ai)** — Using Pixtral Large for state-of-the-art chart understanding.
 
 ---
 
