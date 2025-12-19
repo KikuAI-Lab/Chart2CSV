@@ -64,38 +64,40 @@ def extract_chart_llm(
     # Create Mistral client
     client = Mistral(api_key=api_key)
     
-    # Craft extraction prompt - chain of thought for precision
-    prompt = """You are extracting data from a chart. Be EXTREMELY precise.
+    # Two-pass extraction for better accuracy on dense charts
+    # Pass 1: Analyze and describe what you see
+    # Pass 2: Extract data points one by one
+    
+    prompt = """You are a precise chart data extraction AI. 
 
-TASK: Extract the X,Y coordinates of EVERY data point marker in this chart.
+TASK: Extract ALL data points from this chart with maximum precision.
 
-STEP 1 - ANALYZE AXES:
-First, identify the axis ranges by reading the tick labels.
+ANALYSIS PHASE - Before extracting, observe:
+1. What type of chart is this? (line/scatter/bar)
+2. X-axis: What is the range? What are the gridlines?
+3. Y-axis: What is the range? What are the gridlines?
+4. How many data points/markers are visible? Count them carefully.
 
-STEP 2 - LOCATE MARKERS:
-For line charts: find every dot/marker on the line (not the line itself, the markers).
-For scatter plots: find every dot.
-For bar charts: measure the height of each bar.
+EXTRACTION PHASE - For EACH visible marker:
+- Look at its horizontal position → determine X value
+- Look at its vertical position → determine Y value
+- Do NOT smooth or interpolate - real data is often irregular
 
-STEP 3 - READ VALUES:
-For EACH marker, look at its position and read:
-- X: What X gridline or tick is it at or between?
-- Y: What Y gridline is the marker at? If between gridlines, estimate precisely.
+IMPORTANT FOR LINE CHARTS:
+- Count the actual markers/dots on the line, not just the line endpoints
+- Each marker may have a DIFFERENT Y value - do not assume a pattern
+- If markers are dense (close together), take extra care to read each one
 
-CRITICAL: Do NOT interpolate or assume patterns. Each point may have a UNIQUE value.
-Many charts have irregular data - do not assume smooth curves.
-
-Return JSON only:
+Output ONLY valid JSON:
 {
     "chart_type": "line" or "scatter" or "bar",
     "x_label": "axis label",
     "y_label": "axis label",
-    "data": [{"x": val, "y": val}, ...]
+    "point_count": number of data points you counted,
+    "data": [{"x": value, "y": value}, ...]
 }
 
-Example for irregular data:
-{"data": [{"x": 0, "y": 5}, {"x": 1, "y": 8}, {"x": 2, "y": 12}, {"x": 3, "y": 15}]}
-Note: each Y is different and not following a pattern."""
+VERIFICATION: Your data array length should match point_count."""
 
     try:
         # Direct extraction with pixtral (OCR doesn't work for charts)
