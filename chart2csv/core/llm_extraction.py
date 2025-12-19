@@ -29,7 +29,7 @@ def encode_image_base64(image: np.ndarray) -> str:
 
 def extract_chart_llm(
     image_path: str,
-    model: str = "pixtral-12b-2409"
+    model: str = "mistral-ocr-latest"
 ) -> Tuple[Dict[str, Any], float]:
     """
     Extract chart data using LLM vision in a single API call.
@@ -64,36 +64,43 @@ def extract_chart_llm(
     # Create Mistral client
     client = Mistral(api_key=api_key)
     
-    # Craft extraction prompt
-    prompt = """Analyze this chart image and extract ALL data points.
+    # Craft extraction prompt - chain of thought for precision
+    prompt = """You are extracting data from a chart. Be EXTREMELY precise.
 
-IMPORTANT INSTRUCTIONS:
-1. Read the axis labels and scale carefully
-2. For each visible data point (dot, bar, or line vertex), estimate its X and Y values
-3. Use the actual axis values, not pixel positions
-4. Be precise - read tick marks and interpolate between them
+TASK: Extract the X,Y coordinates of EVERY data point marker in this chart.
 
-Return ONLY valid JSON in this exact format:
+STEP 1 - ANALYZE AXES:
+First, identify the axis ranges by reading the tick labels.
+
+STEP 2 - LOCATE MARKERS:
+For line charts: find every dot/marker on the line (not the line itself, the markers).
+For scatter plots: find every dot.
+For bar charts: measure the height of each bar.
+
+STEP 3 - READ VALUES:
+For EACH marker, look at its position and read:
+- X: What X gridline or tick is it at or between?
+- Y: What Y gridline is the marker at? If between gridlines, estimate precisely.
+
+CRITICAL: Do NOT interpolate or assume patterns. Each point may have a UNIQUE value.
+Many charts have irregular data - do not assume smooth curves.
+
+Return JSON only:
 {
-    "chart_type": "line" or "bar" or "scatter",
-    "x_label": "label from X axis or empty string",
-    "y_label": "label from Y axis or empty string",
-    "x_min": minimum X axis value,
-    "x_max": maximum X axis value,
-    "y_min": minimum Y axis value,
-    "y_max": maximum Y axis value,
-    "data": [
-        {"x": 0, "y": 10},
-        {"x": 1, "y": 20},
-        ...
-    ]
+    "chart_type": "line" or "scatter" or "bar",
+    "x_label": "axis label",
+    "y_label": "axis label",
+    "data": [{"x": val, "y": val}, ...]
 }
 
-Extract ALL visible data points. Do not skip any."""
+Example for irregular data:
+{"data": [{"x": 0, "y": 5}, {"x": 1, "y": 8}, {"x": 2, "y": 12}, {"x": 3, "y": 15}]}
+Note: each Y is different and not following a pattern."""
 
     try:
+        # Direct extraction with pixtral (OCR doesn't work for charts)
         response = client.chat.complete(
-            model=model,
+            model="pixtral-large-latest",
             messages=[
                 {
                     "role": "user",
@@ -104,7 +111,7 @@ Extract ALL visible data points. Do not skip any."""
                 }
             ],
             max_tokens=4096,
-            temperature=0.1  # Low temperature for precision
+            temperature=0.0
         )
         
         content = response.choices[0].message.content.strip()
