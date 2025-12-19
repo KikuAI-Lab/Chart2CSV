@@ -419,6 +419,102 @@ async def extract_data_base64(
         )
 
 
+@app.post("/extract/calibrated", response_model=ExtractionResult)
+async def extract_calibrated(
+    file: UploadFile = File(..., description="Chart image"),
+    calibration_json: str = None,
+    client_ip: str = Depends(get_client_ip)
+):
+    """
+    Extract data using user-provided calibration points.
+    
+    **Use this for Dense charts where automatic extraction fails.**
+    
+    The user provides reference points mapping pixel positions to actual values.
+    The API then extracts data points and applies the calibration transform.
+    
+    **calibration_json format:**
+    ```json
+    {
+        "x_axis": [
+            {"pixel": 100, "value": 0},
+            {"pixel": 500, "value": 20}
+        ],
+        "y_axis": [
+            {"pixel": 350, "value": 0},
+            {"pixel": 50, "value": 30}
+        ]
+    }
+    ```
+    
+    Provide at least 2 points per axis for linear interpolation.
+    """
+    
+    if not rate_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    start = time.time()
+    
+    try:
+        image_bytes = await file.read()
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large")
+        
+        temp_path = image_to_temp_path(image_bytes)
+        
+        try:
+            import json
+            calibration = None
+            if calibration_json:
+                try:
+                    calibration = json.loads(calibration_json)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="Invalid calibration JSON")
+            
+            # Use CV pipeline with calibration points
+            result = extract_chart(
+                image_path=temp_path,
+                calibration_points=calibration,
+                use_mistral=True,
+                generate_overlay_image=False
+            )
+            
+            csv_lines = ["x,y"]
+            for point in result.data:
+                csv_lines.append(f"{point[0]},{point[1]}")
+            csv_content = "\n".join(csv_lines)
+            
+            data = parse_csv_to_data(csv_content)
+            warnings = [f"[{w.code.value}] {w.message}" for w in result.warnings]
+            if calibration:
+                warnings.insert(0, "[CALIBRATED] Using user-provided calibration points")
+            
+            processing_time = int((time.time() - start) * 1000)
+            
+            return ExtractionResult(
+                success=True,
+                chart_type=result.chart_type.value,
+                confidence=round(result.confidence.overall(), 3),
+                data=data,
+                csv=csv_content,
+                warnings=warnings,
+                processing_time_ms=processing_time
+            )
+            
+        finally:
+            import os
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Calibrated extraction failed: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
