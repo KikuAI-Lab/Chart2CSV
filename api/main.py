@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from chart2csv.core.pipeline import extract_chart
 from chart2csv.core.types import ChartType, Scale
+from chart2csv.core.llm_extraction import extract_chart_llm, llm_result_to_csv
 
 
 # --- Models ---
@@ -182,35 +183,35 @@ async def health():
 @app.post("/extract", response_model=ExtractionResult)
 async def extract_data(
     file: UploadFile = File(..., description="Chart image (PNG, JPG, WebP)"),
+    mode: str = "llm",
     chart_type: Optional[str] = None,
     x_scale: str = "linear",
     y_scale: str = "linear",
-    use_mistral: bool = True,
     client_ip: str = Depends(get_client_ip)
 ):
     """
     Extract data from a chart image.
     
+    **Extraction modes:**
+    - `llm`: Use LLM vision (Pixtral) for direct extraction (default, recommended)
+    - `cv`: Use computer vision pipeline with OCR
+    - `auto`: Try LLM first, fall back to CV if it fails
+    
     **Supported chart types:**
-    - Line charts
-    - Bar charts  
-    - Scatter plots
+    - Line charts, Bar charts, Scatter plots
     
     **Not supported:**
     - Heatmaps, pie charts, treemaps, GitHub contribution graphs
     
     **Parameters:**
     - `file`: Chart image file (PNG, JPG, WebP)
+    - `mode`: Extraction mode: llm (default), cv, auto
     - `chart_type`: Force chart type (scatter, line, bar). Auto-detected if not specified.
-    - `x_scale`: X-axis scale (linear, log)
-    - `y_scale`: Y-axis scale (linear, log)
-    - `use_mistral`: Use Mistral AI for better OCR (default: true)
     
     **Returns:**
     - `data`: List of extracted data points
     - `csv`: CSV string
     - `confidence`: Extraction confidence (0-1)
-    - `warnings`: Any warnings about the extraction
     """
     
     # Rate limiting
@@ -243,13 +244,55 @@ async def extract_data(
         temp_path = image_to_temp_path(image_bytes)
         
         try:
-            # Extract chart data
+            warnings = []
+            
+            # LLM extraction (default)
+            if mode in ("llm", "auto"):
+                try:
+                    llm_result, llm_conf = extract_chart_llm(temp_path)
+                    
+                    if "error" not in llm_result and llm_result.get("data"):
+                        # LLM extraction succeeded
+                        data = llm_result.get("data", [])
+                        csv_content = llm_result_to_csv(llm_result)
+                        chart_type_detected = llm_result.get("chart_type", "unknown")
+                        
+                        processing_time = int((time.time() - start) * 1000)
+                        
+                        return ExtractionResult(
+                            success=True,
+                            chart_type=chart_type_detected,
+                            confidence=round(llm_conf, 3),
+                            data=data,
+                            csv=csv_content,
+                            warnings=warnings,
+                            processing_time_ms=processing_time
+                        )
+                    elif mode == "llm":
+                        # LLM mode only, but failed
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"LLM extraction failed: {llm_result.get('error', 'No data extracted')}"
+                        )
+                    else:
+                        # Auto mode, fall back to CV
+                        warnings.append("[LLM_FALLBACK] LLM extraction failed, using CV pipeline")
+                        
+                except Exception as e:
+                    if mode == "llm":
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"LLM extraction error: {str(e)}"
+                        )
+                    warnings.append(f"[LLM_FALLBACK] LLM error: {str(e)}")
+            
+            # CV extraction (fallback or explicit)
             result = extract_chart(
                 image_path=temp_path,
                 chart_type=ChartType(chart_type) if chart_type else None,
                 x_scale=Scale(x_scale),
                 y_scale=Scale(y_scale),
-                use_mistral=use_mistral,
+                use_mistral=True,
                 generate_overlay_image=False
             )
             
@@ -263,7 +306,7 @@ async def extract_data(
             data = parse_csv_to_data(csv_content)
             
             # Collect warnings
-            warnings = [f"[{w.code.value}] {w.message}" for w in result.warnings]
+            warnings.extend([f"[{w.code.value}] {w.message}" for w in result.warnings])
             
             processing_time = int((time.time() - start) * 1000)
             
