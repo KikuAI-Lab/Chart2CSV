@@ -179,10 +179,10 @@ def parse_csv_to_data(csv_content: str) -> list[dict]:
     lines = csv_content.strip().split("\n")
     if len(lines) < 2:
         return []
-    
+
     headers = [h.strip() for h in lines[0].split(",")]
     data = []
-    
+
     for line in lines[1:]:
         values = [v.strip() for v in line.split(",")]
         if len(values) == len(headers):
@@ -193,8 +193,131 @@ def parse_csv_to_data(csv_content: str) -> list[dict]:
                 except ValueError:
                     row[h] = values[i]
             data.append(row)
-    
+
     return data
+
+
+async def _process_chart_extraction(
+    image_bytes: bytes,
+    mode: str = "llm",
+    chart_type: Optional[str] = None,
+    x_scale: str = "linear",
+    y_scale: str = "linear",
+    calibration_points: Optional[dict] = None,
+    use_mistral: bool = True
+) -> ExtractionResult:
+    """
+    Core extraction logic shared across all endpoints.
+
+    Args:
+        image_bytes: Raw image bytes
+        mode: Extraction mode (llm, cv, auto)
+        chart_type: Optional chart type override
+        x_scale: X-axis scale (linear, log)
+        y_scale: Y-axis scale (linear, log)
+        calibration_points: Optional manual calibration data
+        use_mistral: Whether to use Mistral OCR
+
+    Returns:
+        ExtractionResult with extracted data
+    """
+    import asyncio
+
+    start = time.time()
+    temp_path = None
+
+    try:
+        # Save to temp file with validation
+        temp_path = image_to_temp_path(image_bytes)
+        warnings = []
+
+        # LLM extraction (default or auto mode)
+        if mode in ("llm", "auto") and not calibration_points:
+            try:
+                # Run LLM extraction in thread pool to avoid blocking
+                llm_result, llm_conf = await asyncio.to_thread(
+                    extract_chart_llm, temp_path
+                )
+
+                if "error" not in llm_result and llm_result.get("data"):
+                    # LLM extraction succeeded
+                    data = llm_result.get("data", [])
+                    csv_content = llm_result_to_csv(llm_result)
+                    chart_type_detected = llm_result.get("chart_type", "unknown")
+
+                    processing_time = int((time.time() - start) * 1000)
+
+                    return ExtractionResult(
+                        success=True,
+                        chart_type=chart_type_detected,
+                        confidence=round(llm_conf, 3),
+                        data=data,
+                        csv=csv_content,
+                        warnings=warnings,
+                        processing_time_ms=processing_time
+                    )
+                elif mode == "llm":
+                    # LLM mode only, but failed
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"LLM extraction failed: {llm_result.get('error', 'No data extracted')}"
+                    )
+                else:
+                    # Auto mode, fall back to CV
+                    warnings.append("[LLM_FALLBACK] LLM extraction failed, using CV pipeline")
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                if mode == "llm":
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"LLM extraction error: {str(e)}"
+                    )
+                warnings.append(f"[LLM_FALLBACK] LLM error: {str(e)}")
+
+        # CV extraction (fallback or explicit or calibrated)
+        result = await asyncio.to_thread(
+            extract_chart,
+            image_path=temp_path,
+            chart_type=ChartType(chart_type) if chart_type else None,
+            x_scale=Scale(x_scale),
+            y_scale=Scale(y_scale),
+            calibration_points=calibration_points,
+            use_mistral=use_mistral,
+            generate_overlay_image=False
+        )
+
+        # Build CSV
+        csv_lines = ["x,y"]
+        for point in result.data:
+            csv_lines.append(f"{point[0]},{point[1]}")
+        csv_content = "\n".join(csv_lines)
+
+        # Parse to data
+        data = parse_csv_to_data(csv_content)
+
+        # Collect warnings
+        warnings.extend([f"[{w.code.value}] {w.message}" for w in result.warnings])
+        if calibration_points:
+            warnings.insert(0, "[CALIBRATED] Using user-provided calibration points")
+
+        processing_time = int((time.time() - start) * 1000)
+
+        return ExtractionResult(
+            success=True,
+            chart_type=result.chart_type.value,
+            confidence=round(result.confidence.overall(), 3),
+            data=data,
+            csv=csv_content,
+            warnings=warnings,
+            processing_time_ms=processing_time
+        )
+
+    finally:
+        # Clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 # --- Routes ---
@@ -230,144 +353,70 @@ async def extract_data(
 ):
     """
     Extract data from a chart image.
-    
+
     **Extraction modes:**
     - `llm`: Use LLM vision (Pixtral) for direct extraction (default, recommended)
     - `cv`: Use computer vision pipeline with OCR
     - `auto`: Try LLM first, fall back to CV if it fails
-    
+
     **Supported chart types:**
     - Line charts, Bar charts, Scatter plots
-    
+
     **Not supported:**
     - Heatmaps, pie charts, treemaps, GitHub contribution graphs
-    
+
     **Parameters:**
     - `file`: Chart image file (PNG, JPG, WebP)
     - `mode`: Extraction mode: llm (default), cv, auto
     - `chart_type`: Force chart type (scatter, line, bar). Auto-detected if not specified.
-    
+
     **Returns:**
     - `data`: List of extracted data points
     - `csv`: CSV string
     - `confidence`: Extraction confidence (0-1)
     """
-    
+
     # Rate limiting
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded. Max 20 requests per minute."
         )
-    
+
     # Validate file type
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
             detail="Invalid file type. Please upload an image (PNG, JPG, WebP)."
         )
-    
-    start = time.time()
-    
+
     try:
         # Read image
         image_bytes = await file.read()
-        
+
         if len(image_bytes) > 10 * 1024 * 1024:  # 10MB limit
             raise HTTPException(
                 status_code=400,
                 detail="File too large. Maximum size is 10MB."
             )
-        
-        # Save to temp file
-        temp_path = image_to_temp_path(image_bytes)
-        
-        try:
-            warnings = []
-            
-            # LLM extraction (default)
-            if mode in ("llm", "auto"):
-                try:
-                    llm_result, llm_conf = extract_chart_llm(temp_path)
-                    
-                    if "error" not in llm_result and llm_result.get("data"):
-                        # LLM extraction succeeded
-                        data = llm_result.get("data", [])
-                        csv_content = llm_result_to_csv(llm_result)
-                        chart_type_detected = llm_result.get("chart_type", "unknown")
-                        
-                        processing_time = int((time.time() - start) * 1000)
-                        
-                        return ExtractionResult(
-                            success=True,
-                            chart_type=chart_type_detected,
-                            confidence=round(llm_conf, 3),
-                            data=data,
-                            csv=csv_content,
-                            warnings=warnings,
-                            processing_time_ms=processing_time
-                        )
-                    elif mode == "llm":
-                        # LLM mode only, but failed
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"LLM extraction failed: {llm_result.get('error', 'No data extracted')}"
-                        )
-                    else:
-                        # Auto mode, fall back to CV
-                        warnings.append("[LLM_FALLBACK] LLM extraction failed, using CV pipeline")
-                        
-                except Exception as e:
-                    if mode == "llm":
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"LLM extraction error: {str(e)}"
-                        )
-                    warnings.append(f"[LLM_FALLBACK] LLM error: {str(e)}")
-            
-            # CV extraction (fallback or explicit)
-            result = extract_chart(
-                image_path=temp_path,
-                chart_type=ChartType(chart_type) if chart_type else None,
-                x_scale=Scale(x_scale),
-                y_scale=Scale(y_scale),
-                use_mistral=True,
-                generate_overlay_image=False
-            )
-            
-            # Build CSV
-            csv_lines = ["x,y"]
-            for point in result.data:
-                csv_lines.append(f"{point[0]},{point[1]}")
-            csv_content = "\n".join(csv_lines)
-            
-            # Parse to data
-            data = parse_csv_to_data(csv_content)
-            
-            # Collect warnings
-            warnings.extend([f"[{w.code.value}] {w.message}" for w in result.warnings])
-            
-            processing_time = int((time.time() - start) * 1000)
-            
-            return ExtractionResult(
-                success=True,
-                chart_type=result.chart_type.value,
-                confidence=round(result.confidence.overall(), 3),
-                data=data,
-                csv=csv_content,
-                warnings=warnings,
-                processing_time_ms=processing_time
-            )
-            
-        finally:
-            # Clean up temp file
-            import os
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-                
+
+        # Process extraction using shared logic
+        return await _process_chart_extraction(
+            image_bytes=image_bytes,
+            mode=mode,
+            chart_type=chart_type,
+            x_scale=x_scale,
+            y_scale=y_scale,
+            use_mistral=True
+        )
+
     except HTTPException:
         raise
+    except ValueError as e:
+        # Image validation errors from image_to_temp_path
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Extraction failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Extraction failed: {str(e)}"
@@ -377,6 +426,7 @@ async def extract_data(
 @app.post("/extract/base64", response_model=ExtractionResult)
 async def extract_data_base64(
     image_base64: str,
+    mode: str = "llm",
     chart_type: Optional[str] = None,
     x_scale: str = "linear",
     y_scale: str = "linear",
@@ -385,73 +435,56 @@ async def extract_data_base64(
 ):
     """
     Extract data from a base64-encoded chart image.
-    
+
     Same as /extract but accepts base64 string instead of file upload.
+
+    **Parameters:**
+    - `image_base64`: Base64-encoded image (with or without data URI prefix)
+    - `mode`: Extraction mode (llm, cv, auto)
+    - `chart_type`: Optional chart type override
+    - `x_scale`, `y_scale`: Axis scales (linear or log)
+    - `use_mistral`: Use Mistral OCR for CV mode
+
+    **Returns:**
+    - Same as /extract endpoint
     """
-    
+
     # Rate limiting
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded. Max 20 requests per minute."
         )
-    
-    start = time.time()
-    
+
     try:
         # Decode base64
         if "," in image_base64:
             image_base64 = image_base64.split(",")[1]
-        
+
         image_bytes = base64.b64decode(image_base64)
-        
+
         if len(image_bytes) > 10 * 1024 * 1024:
             raise HTTPException(
                 status_code=400,
                 detail="Image too large. Maximum size is 10MB."
             )
-        
-        # Save to temp file
-        temp_path = image_to_temp_path(image_bytes)
-        
-        try:
-            result = extract_chart(
-                image_path=temp_path,
-                chart_type=ChartType(chart_type) if chart_type else None,
-                x_scale=Scale(x_scale),
-                y_scale=Scale(y_scale),
-                use_mistral=use_mistral,
-                generate_overlay_image=False
-            )
-            
-            csv_lines = ["x,y"]
-            for point in result.data:
-                csv_lines.append(f"{point[0]},{point[1]}")
-            csv_content = "\n".join(csv_lines)
-            
-            data = parse_csv_to_data(csv_content)
-            warnings = [f"[{w.code.value}] {w.message}" for w in result.warnings]
-            
-            processing_time = int((time.time() - start) * 1000)
-            
-            return ExtractionResult(
-                success=True,
-                chart_type=result.chart_type.value,
-                confidence=round(result.confidence.overall(), 3),
-                data=data,
-                csv=csv_content,
-                warnings=warnings,
-                processing_time_ms=processing_time
-            )
-            
-        finally:
-            import os
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-                
+
+        # Process extraction using shared logic
+        return await _process_chart_extraction(
+            image_bytes=image_bytes,
+            mode=mode,
+            chart_type=chart_type,
+            x_scale=x_scale,
+            y_scale=y_scale,
+            use_mistral=use_mistral
+        )
+
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Base64 extraction failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Extraction failed: {str(e)}"
@@ -466,12 +499,12 @@ async def extract_calibrated(
 ):
     """
     Extract data using user-provided calibration points.
-    
+
     **Use this for Dense charts where automatic extraction fails.**
-    
+
     The user provides reference points mapping pixel positions to actual values.
     The API then extracts data points and applies the calibration transform.
-    
+
     **calibration_json format:**
     ```json
     {
@@ -485,73 +518,59 @@ async def extract_calibrated(
         ]
     }
     ```
-    
+
     Provide at least 2 points per axis for linear interpolation.
+
+    **Example curl:**
+    ```bash
+    curl -X POST "http://localhost:8000/extract/calibrated" \
+      -F "file=@chart.png" \
+      -F 'calibration_json={"x_axis":[{"pixel":100,"value":0},{"pixel":500,"value":20}],"y_axis":[{"pixel":350,"value":0},{"pixel":50,"value":30}]}'
+    ```
     """
-    
+
     if not rate_limiter.is_allowed(client_ip):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
-    
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 20 requests per minute.")
+
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Invalid file type")
-    
-    start = time.time()
-    
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
+
     try:
         image_bytes = await file.read()
+
         if len(image_bytes) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="File too large")
-        
-        temp_path = image_to_temp_path(image_bytes)
-        
-        try:
-            import json
-            calibration = None
-            if calibration_json:
-                try:
-                    calibration = json.loads(calibration_json)
-                except json.JSONDecodeError:
-                    raise HTTPException(status_code=400, detail="Invalid calibration JSON")
-            
-            # Use CV pipeline with calibration points
-            result = extract_chart(
-                image_path=temp_path,
-                calibration_points=calibration,
-                use_mistral=True,
-                generate_overlay_image=False
-            )
-            
-            csv_lines = ["x,y"]
-            for point in result.data:
-                csv_lines.append(f"{point[0]},{point[1]}")
-            csv_content = "\n".join(csv_lines)
-            
-            data = parse_csv_to_data(csv_content)
-            warnings = [f"[{w.code.value}] {w.message}" for w in result.warnings]
-            if calibration:
-                warnings.insert(0, "[CALIBRATED] Using user-provided calibration points")
-            
-            processing_time = int((time.time() - start) * 1000)
-            
-            return ExtractionResult(
-                success=True,
-                chart_type=result.chart_type.value,
-                confidence=round(result.confidence.overall(), 3),
-                data=data,
-                csv=csv_content,
-                warnings=warnings,
-                processing_time_ms=processing_time
-            )
-            
-        finally:
-            import os
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-                
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
+
+        # Parse calibration JSON
+        import json
+        calibration = None
+        if calibration_json:
+            try:
+                calibration = json.loads(calibration_json)
+            except json.JSONDecodeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid calibration JSON: {str(e)}"
+                )
+
+        # Process extraction with calibration
+        return await _process_chart_extraction(
+            image_bytes=image_bytes,
+            mode="cv",  # Calibration requires CV pipeline
+            calibration_points=calibration,
+            use_mistral=True
+        )
+
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Calibrated extraction failed: {str(e)}")
+        logger.error(f"Calibrated extraction failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Calibrated extraction failed: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
