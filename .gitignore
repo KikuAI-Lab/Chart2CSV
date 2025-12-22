@@ -54,9 +54,30 @@ results/
 output/
 *.png.overlay.png
 bench_report.json
+temp_*.png
+temp_*.jpg
+temp_*.jpeg
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+credentials.json
 
 # Logs
 *.log
+logs/
+
+# Coverage reports
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
 
 # Distribution
 MANIFEST
+
+# Type checking
+.pytype/
+pyrightconfig.json
