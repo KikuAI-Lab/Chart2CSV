@@ -99,10 +99,10 @@ def extract_scatter_points_color(
     # Crop if specified
     if crop_box:
         x1, y1, x2, y2 = crop_box
-        cropped = image[y1:y2, x1:x2].copy()
+        cropped = image[y1:y2, x1:x2]
         offset_x, offset_y = x1, y1
     else:
-        cropped = image.copy()
+        cropped = image
         offset_x, offset_y = 0, 0
 
     # Convert to HSV for color detection
@@ -178,17 +178,19 @@ def extract_scatter_points_blob(
     # Crop if specified
     if crop_box:
         x1, y1, x2, y2 = crop_box
-        cropped = image[y1:y2, x1:x2].copy()
+        cropped = image[y1:y2, x1:x2]
         offset_x, offset_y = x1, y1
     else:
-        cropped = image.copy()
+        cropped = image
         offset_x, offset_y = 0, 0
 
     # Convert to grayscale
     if len(cropped.shape) == 3:
         gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
     else:
-        gray = cropped.copy()
+        # Use copy only if we need to modify it later or ensure ownership
+        # Here we only read it for brightness check and thresholding
+        gray = cropped
 
     # Invert if needed (white background → black points)
     mean_brightness = np.mean(gray)

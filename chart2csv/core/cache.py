@@ -21,7 +21,10 @@ def get_cache_dir() -> Path:
 
 def compute_image_hash(image: np.ndarray) -> str:
     """Compute hash of image for cache key."""
-    # Use a fast hash of the image bytes
+    # Optimization: Use buffer protocol directly if contiguous to avoid copy
+    if image.flags['C_CONTIGUOUS']:
+        return hashlib.md5(image).hexdigest()
+    # Fallback to tobytes() which handles non-contiguous arrays (by copying)
     return hashlib.md5(image.tobytes()).hexdigest()
 
 
