@@ -13,12 +13,16 @@ import logging
 from typing import Optional
 from contextlib import asynccontextmanager
 
+import uuid
+
 import numpy as np
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 # Rate limiting
 from collections import defaultdict
@@ -62,6 +66,14 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     uptime_seconds: float
+
+
+class APIResponse(BaseModel):
+    """Unified API response wrapper."""
+    success: bool
+    data: dict | None = None
+    error: dict | None = None
+    meta: dict | None = None
 
 
 # --- Rate Limiting ---
@@ -112,6 +124,24 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+# API v1 router
+v1_router = APIRouter(prefix="/v1", tags=["v1"])
+
+
+# Request ID middleware
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Add unique request ID to each request for tracking."""
+    
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
 
 # CORS - Configure allowed origins from environment
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
@@ -342,8 +372,8 @@ async def health():
     )
 
 
-@app.post("/extract", response_model=ExtractionResult)
-async def extract_data(
+@v1_router.post("/extract", response_model=ExtractionResult)
+async def extract_data_v1(
     file: UploadFile = File(..., description="Chart image (PNG, JPG, WebP)"),
     mode: str = "llm",
     chart_type: Optional[str] = None,
@@ -375,7 +405,33 @@ async def extract_data(
     - `csv`: CSV string
     - `confidence`: Extraction confidence (0-1)
     """
+    return await _extract_data_impl(file, mode, chart_type, x_scale, y_scale, client_ip)
 
+
+# Legacy endpoint with deprecation warning
+@app.post("/extract", response_model=ExtractionResult, deprecated=True, tags=["Legacy"])
+async def extract_data_legacy(
+    file: UploadFile = File(..., description="Chart image (PNG, JPG, WebP)"),
+    mode: str = "llm",
+    chart_type: Optional[str] = None,
+    x_scale: str = "linear",
+    y_scale: str = "linear",
+    client_ip: str = Depends(get_client_ip)
+):
+    """[DEPRECATED] Use /v1/extract instead. This endpoint will be removed in 6 months."""
+    logger.warning("Deprecated endpoint /extract called. Use /v1/extract instead.")
+    return await _extract_data_impl(file, mode, chart_type, x_scale, y_scale, client_ip)
+
+
+async def _extract_data_impl(
+    file: UploadFile,
+    mode: str,
+    chart_type: Optional[str],
+    x_scale: str,
+    y_scale: str,
+    client_ip: str
+):
+    """Shared implementation for extract endpoints."""
     # Rate limiting
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(
@@ -423,8 +479,8 @@ async def extract_data(
         )
 
 
-@app.post("/extract/base64", response_model=ExtractionResult)
-async def extract_data_base64(
+@v1_router.post("/extract/base64", response_model=ExtractionResult)
+async def extract_data_base64_v1(
     image_base64: str,
     mode: str = "llm",
     chart_type: Optional[str] = None,
@@ -436,7 +492,7 @@ async def extract_data_base64(
     """
     Extract data from a base64-encoded chart image.
 
-    Same as /extract but accepts base64 string instead of file upload.
+    Same as /v1/extract but accepts base64 string instead of file upload.
 
     **Parameters:**
     - `image_base64`: Base64-encoded image (with or without data URI prefix)
@@ -446,9 +502,37 @@ async def extract_data_base64(
     - `use_mistral`: Use Mistral OCR for CV mode
 
     **Returns:**
-    - Same as /extract endpoint
+    - Same as /v1/extract endpoint
     """
+    return await _extract_base64_impl(image_base64, mode, chart_type, x_scale, y_scale, use_mistral, client_ip)
 
+
+# Legacy base64 endpoint
+@app.post("/extract/base64", response_model=ExtractionResult, deprecated=True, tags=["Legacy"])
+async def extract_data_base64_legacy(
+    image_base64: str,
+    mode: str = "llm",
+    chart_type: Optional[str] = None,
+    x_scale: str = "linear",
+    y_scale: str = "linear",
+    use_mistral: bool = True,
+    client_ip: str = Depends(get_client_ip)
+):
+    """[DEPRECATED] Use /v1/extract/base64 instead. This endpoint will be removed in 6 months."""
+    logger.warning("Deprecated endpoint /extract/base64 called. Use /v1/extract/base64 instead.")
+    return await _extract_base64_impl(image_base64, mode, chart_type, x_scale, y_scale, use_mistral, client_ip)
+
+
+async def _extract_base64_impl(
+    image_base64: str,
+    mode: str,
+    chart_type: Optional[str],
+    x_scale: str,
+    y_scale: str,
+    use_mistral: bool,
+    client_ip: str
+):
+    """Shared implementation for base64 extract endpoints."""
     # Rate limiting
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(
@@ -491,8 +575,8 @@ async def extract_data_base64(
         )
 
 
-@app.post("/extract/calibrated", response_model=ExtractionResult)
-async def extract_calibrated(
+@v1_router.post("/extract/calibrated", response_model=ExtractionResult)
+async def extract_calibrated_v1(
     file: UploadFile = File(..., description="Chart image"),
     calibration_json: str = None,
     client_ip: str = Depends(get_client_ip)
@@ -520,15 +604,28 @@ async def extract_calibrated(
     ```
 
     Provide at least 2 points per axis for linear interpolation.
-
-    **Example curl:**
-    ```bash
-    curl -X POST "http://localhost:8000/extract/calibrated" \
-      -F "file=@chart.png" \
-      -F 'calibration_json={"x_axis":[{"pixel":100,"value":0},{"pixel":500,"value":20}],"y_axis":[{"pixel":350,"value":0},{"pixel":50,"value":30}]}'
-    ```
     """
+    return await _extract_calibrated_impl(file, calibration_json, client_ip)
 
+
+# Legacy calibrated endpoint
+@app.post("/extract/calibrated", response_model=ExtractionResult, deprecated=True, tags=["Legacy"])
+async def extract_calibrated_legacy(
+    file: UploadFile = File(..., description="Chart image"),
+    calibration_json: str = None,
+    client_ip: str = Depends(get_client_ip)
+):
+    """[DEPRECATED] Use /v1/extract/calibrated instead. This endpoint will be removed in 6 months."""
+    logger.warning("Deprecated endpoint /extract/calibrated called. Use /v1/extract/calibrated instead.")
+    return await _extract_calibrated_impl(file, calibration_json, client_ip)
+
+
+async def _extract_calibrated_impl(
+    file: UploadFile,
+    calibration_json: str,
+    client_ip: str
+):
+    """Shared implementation for calibrated extract endpoints."""
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 20 requests per minute.")
 
@@ -571,6 +668,10 @@ async def extract_calibrated(
             status_code=500,
             detail=f"Calibrated extraction failed: {str(e)}"
         )
+
+
+# Register v1 router
+app.include_router(v1_router)
 
 
 if __name__ == "__main__":
