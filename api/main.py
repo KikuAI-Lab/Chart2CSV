@@ -149,7 +149,10 @@ if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == [""]:
     # Default allowed origins for production
     ALLOWED_ORIGINS = [
         "https://kiku-jw.github.io",
+        "https://kikuai-lab.github.io",
         "https://chart2csv.kikuai.dev",
+        "https://kikuai.dev",
+        "https://www.kikuai.dev",
         "http://localhost:3000",  # Development frontend
     ]
 
