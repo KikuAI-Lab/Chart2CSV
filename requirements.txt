@@ -13,6 +13,7 @@ pypdfium2>=4.0.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 pydantic>=2.0.0
+prometheus-client>=0.19.0
 
 # LLM
 mistralai>=1.0.0
