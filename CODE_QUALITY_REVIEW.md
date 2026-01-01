@@ -297,7 +297,7 @@ url="https://github.com/yourusername/chart2csv",
 
 **Рекомендация:**
 ```python
-author="KikuAI Lab",
+author="KikuAI",
 author_email="contact@kikuai.dev",
 url="https://github.com/KikuAI-Lab/Chart2CSV",
 ```
@@ -428,7 +428,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chart2csv"
 version = "0.1.0"
-authors = [{name = "KikuAI Lab", email = "contact@kikuai.dev"}]
+authors = [{name = "KikuAI", email = "contact@kikuai.dev"}]
 license = {text = "AGPL-3.0"}
 requires-python = ">=3.8"
 
