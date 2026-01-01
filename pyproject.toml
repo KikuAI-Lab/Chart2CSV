@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "chart2csv"
 version = "0.1.0"
 authors = [
-    {name = "KikuAI Lab", email = "contact@kikuai.dev"}
+    {name = "KikuAI", email = "contact@kikuai.dev"}
 ]
 description = "Extract data from chart images to CSV/JSON with honest confidence scoring"
 readme = "README.md"

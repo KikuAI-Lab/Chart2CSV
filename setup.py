@@ -23,7 +23,7 @@ else:
 setup(
     name="chart2csv",
     version="0.1.0",
-    author="KikuAI Lab",
+    author="KikuAI",
     author_email="contact@kikuai.dev",
     description="Extract data from chart images to CSV/JSON with honest confidence scoring",
     long_description=long_description,
